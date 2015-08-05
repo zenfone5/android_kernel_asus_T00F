@@ -1233,7 +1233,7 @@ static void __exit mid_vdd_module_exit(void)
 	platform_driver_unregister(&mid_volt_drop_detect_driver);
 }
 
-module_init(mid_vdd_module_init);
+late_initcall(mid_vdd_module_init);
 module_exit(mid_vdd_module_exit);
 
 MODULE_AUTHOR("Durgadoss R <durgadoss.r@intel.com>");

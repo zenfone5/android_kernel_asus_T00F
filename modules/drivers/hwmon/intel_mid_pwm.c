@@ -198,7 +198,7 @@ static int __init intel_mid_pwm_rpmsg_init(void)
 	return register_rpmsg_driver(&intel_mid_pwm_rpmsg);
 }
 
-module_init(intel_mid_pwm_rpmsg_init);
+late_initcall(intel_mid_pwm_rpmsg_init);
 
 static void __exit intel_mid_pwm_rpmsg_exit(void)
 {

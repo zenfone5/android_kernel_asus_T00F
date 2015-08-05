@@ -601,7 +601,7 @@ static void __exit intel_mid_vibra_exit(void)
 	return;
 }
 
-late_initcall(intel_mid_vibra_init);
+module_init(intel_mid_vibra_init);
 module_exit(intel_mid_vibra_exit);
 
 MODULE_ALIAS("pci:intel_mid_vibra");

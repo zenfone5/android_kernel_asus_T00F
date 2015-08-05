@@ -91,7 +91,7 @@
 
 //#define ASUS_TOUCH_PALM_NODE	//<ASUS_Proc+>
 #define ASUS_TOUCH_PROXIMITY_NODE	//<ASUS_Proximity+>
-//#define ASUS_TOUCH_DTP_WAKEUP	//<ASUS_DTP+>
+#define ASUS_TOUCH_DTP_WAKEUP	//<ASUS_DTP+>
 
 extern int Read_PROJ_ID(void);
 extern int Read_TP_ID(void);
@@ -3667,7 +3667,7 @@ static void synaptics_rmi4_sensor_wake(struct synaptics_rmi4_data *rmi4_data)
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to wake from sleep mode\n",
 				__func__);
-		rmi4_data->sensor_sleep = true;
+		rmi4_data->sensor_sleep = false;
 		return;
 	}
 
@@ -3682,7 +3682,7 @@ static void synaptics_rmi4_sensor_wake(struct synaptics_rmi4_data *rmi4_data)
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to wake from sleep mode\n",
 				__func__);
-		rmi4_data->sensor_sleep = true;
+		rmi4_data->sensor_sleep = false;
 		return;
 	} else {
 		rmi4_data->sensor_sleep = false;
@@ -3690,7 +3690,7 @@ static void synaptics_rmi4_sensor_wake(struct synaptics_rmi4_data *rmi4_data)
 
 	return;
 }
-
+#endif
 #ifdef CONFIG_HAS_EARLYSUSPEND
  /**
  * synaptics_rmi4_early_suspend()
@@ -3714,7 +3714,7 @@ static void synaptics_rmi4_early_suspend(struct early_suspend *h)
 	struct synaptics_rmi4_f12_ctrl_20 ctrl_20;
 
 	if (rmi4_data->dclick_mode == 1) {
-		wake_lock(&rmi4_data->wake_lock);		
+		//wake_lock(&rmi4_data->wake_lock);		
 
 		retval = synaptics_rmi4_reg_read(rmi4_data,
 				rmi4_data->f12_ctrl20_base_addr,
@@ -3732,15 +3732,15 @@ static void synaptics_rmi4_early_suspend(struct early_suspend *h)
 
 		synaptics_rmi4_free_fingers(rmi4_data);
 
-//		mutex_lock(&exp_data.mutex);
-//		if (!list_empty(&exp_data.list)) {
-//			list_for_each_entry(exp_fhandler, &exp_data.list, link)
-//				if (exp_fhandler->exp_fn->early_suspend != NULL)
-//					exp_fhandler->exp_fn->early_suspend(rmi4_data);
-//		}
-//		mutex_unlock(&exp_data.mutex);
+		mutex_lock(&exp_data.mutex);
+		if (!list_empty(&exp_data.list)) {
+			list_for_each_entry(exp_fhandler, &exp_data.list, link)
+				if (exp_fhandler->exp_fn->early_suspend != NULL)
+					exp_fhandler->exp_fn->early_suspend(rmi4_data);
+		}
+		mutex_unlock(&exp_data.mutex);
 
-		wake_unlock(&rmi4_data->wake_lock);
+	//	wake_unlock(&rmi4_data->wake_lock);
 
 		return;
 	} else {
@@ -3766,14 +3766,6 @@ static void synaptics_rmi4_early_suspend(struct early_suspend *h)
 	synaptics_rmi4_irq_enable(rmi4_data, false);
 	synaptics_rmi4_sensor_sleep(rmi4_data);
 	synaptics_rmi4_free_fingers(rmi4_data);
-
-	mutex_lock(&exp_data.mutex);
-	if (!list_empty(&exp_data.list)) {
-		list_for_each_entry(exp_fhandler, &exp_data.list, link)
-			if (exp_fhandler->exp_fn->early_suspend != NULL)
-				exp_fhandler->exp_fn->early_suspend(rmi4_data);
-	}
-	mutex_unlock(&exp_data.mutex);
 
 	if (rmi4_data->full_pm_cycle)
 		synaptics_rmi4_suspend(&(rmi4_data->input_dev->dev));
@@ -3810,7 +3802,7 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h)
 	struct synaptics_rmi4_f12_ctrl_20 ctrl_20;
 
 	if (rmi4_data->dclick_mode == 1) {
-		wake_lock(&rmi4_data->wake_lock);
+	//	wake_lock(&rmi4_data->wake_lock);
 
 		retval = synaptics_rmi4_reg_read(rmi4_data,
 				rmi4_data->f12_ctrl20_base_addr,
@@ -3826,15 +3818,15 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h)
 				&ctrl_20.data,
 				sizeof(ctrl_20.data));
 
-//		mutex_lock(&exp_data.mutex);
-//		if (!list_empty(&exp_data.list)) {
-//			list_for_each_entry(exp_fhandler, &exp_data.list, link)
-//				if (exp_fhandler->exp_fn->late_resume != NULL)
-//					exp_fhandler->exp_fn->late_resume(rmi4_data);
-//		}
-//		mutex_unlock(&exp_data.mutex);
+		mutex_lock(&exp_data.mutex);
+		if (!list_empty(&exp_data.list)) {
+			list_for_each_entry(exp_fhandler, &exp_data.list, link)
+				if (exp_fhandler->exp_fn->late_resume != NULL)
+					exp_fhandler->exp_fn->late_resume(rmi4_data);
+		}
+		mutex_unlock(&exp_data.mutex);
 
-		wake_unlock(&rmi4_data->wake_lock);
+	//	wake_unlock(&rmi4_data->wake_lock);
 
 		//ForceCal
 		retval = synaptics_rmi4_reg_write(rmi4_data,
@@ -3887,13 +3879,6 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h)
 		}
 	}
 
-	mutex_lock(&exp_data.mutex);
-	if (!list_empty(&exp_data.list)) {
-		list_for_each_entry(exp_fhandler, &exp_data.list, link)
-			if (exp_fhandler->exp_fn->late_resume != NULL)
-				exp_fhandler->exp_fn->late_resume(rmi4_data);
-	}
-	mutex_unlock(&exp_data.mutex);
 
 	rmi4_data->touch_stopped = false;
 
@@ -3928,8 +3913,8 @@ static int synaptics_rmi4_suspend(struct device *dev)
 	struct synaptics_rmi4_f12_ctrl_20 ctrl_20;
 
 	if (rmi4_data->dclick_mode == 1) {
-//		wake_lock(&rmi4_data->wake_lock);
-/*
+	//	wake_lock(&rmi4_data->wake_lock);
+
 		retval = synaptics_rmi4_reg_read(rmi4_data,
 				rmi4_data->f12_ctrl20_base_addr,
 				ctrl_20.data,
@@ -3943,22 +3928,24 @@ static int synaptics_rmi4_suspend(struct device *dev)
 				rmi4_data->f12_ctrl20_base_addr,
 				&ctrl_20.data,
 				sizeof(ctrl_20.data));
-*/
-//		synaptics_rmi4_free_fingers(rmi4_data);
 
-//		mutex_lock(&exp_data.mutex);
-//		if (!list_empty(&exp_data.list)) {
-//			list_for_each_entry(exp_fhandler, &exp_data.list, link)
-//				if (exp_fhandler->exp_fn->suspend != NULL)
-//					exp_fhandler->exp_fn->suspend(rmi4_data);
-//		}
-//		mutex_unlock(&exp_data.mutex);
+		synaptics_rmi4_free_fingers(rmi4_data);
 
-//		wake_unlock(&rmi4_data->wake_lock);
+		mutex_lock(&exp_data.mutex);
+		if (!list_empty(&exp_data.list)) {
+			list_for_each_entry(exp_fhandler, &exp_data.list, link)
+				if (exp_fhandler->exp_fn->suspend != NULL)
+					exp_fhandler->exp_fn->suspend(rmi4_data);
+		}
+		mutex_unlock(&exp_data.mutex);
 
-		return 0;
-	} else {
+	//	wake_unlock(&rmi4_data->wake_lock);
+
+		return;
+	} 
+}
 #endif
+#if 0
 //<ASUS_DTP->
 
 	if (rmi4_data->staying_awake)
@@ -3984,12 +3971,9 @@ static int synaptics_rmi4_suspend(struct device *dev)
 
 	return 0;
 
-//<ASUS_DTP+>
-#ifdef ASUS_TOUCH_DTP_WAKEUP
-	}
+
 #endif
 //<ASUS_DTP->
-}
 
  /**
  * synaptics_rmi4_resume()
@@ -4014,8 +3998,8 @@ static int synaptics_rmi4_resume(struct device *dev)
 	struct synaptics_rmi4_f12_ctrl_20 ctrl_20;
 
 	if (rmi4_data->dclick_mode == 1) {
-//		wake_lock(&rmi4_data->wake_lock);
-/*
+		//wake_lock(&rmi4_data->wake_lock);
+
 		retval = synaptics_rmi4_reg_read(rmi4_data,
 				rmi4_data->f12_ctrl20_base_addr,
 				ctrl_20.data,
@@ -4029,16 +4013,16 @@ static int synaptics_rmi4_resume(struct device *dev)
 				rmi4_data->f12_ctrl20_base_addr,
 				&ctrl_20.data,
 				sizeof(ctrl_20.data));
-*/
-//		mutex_lock(&exp_data.mutex);
-//		if (!list_empty(&exp_data.list)) {
-//			list_for_each_entry(exp_fhandler, &exp_data.list, link)
-//				if (exp_fhandler->exp_fn->resume != NULL)
-//					exp_fhandler->exp_fn->resume(rmi4_data);
-//		}
-//		mutex_unlock(&exp_data.mutex);
 
-//		wake_unlock(&rmi4_data->wake_lock);
+		mutex_lock(&exp_data.mutex);
+		if (!list_empty(&exp_data.list)) {
+			list_for_each_entry(exp_fhandler, &exp_data.list, link)
+				if (exp_fhandler->exp_fn->resume != NULL)
+					exp_fhandler->exp_fn->resume(rmi4_data);
+		}
+		mutex_unlock(&exp_data.mutex);
+
+		//wake_unlock(&rmi4_data->wake_lock);
 
 		return 0;
 	} else {
@@ -4079,13 +4063,6 @@ static int synaptics_rmi4_resume(struct device *dev)
 		return retval;
 	}
 
-	mutex_lock(&exp_data.mutex);
-	if (!list_empty(&exp_data.list)) {
-		list_for_each_entry(exp_fhandler, &exp_data.list, link)
-			if (exp_fhandler->exp_fn->resume != NULL)
-				exp_fhandler->exp_fn->resume(rmi4_data);
-	}
-	mutex_unlock(&exp_data.mutex);
 
 	rmi4_data->touch_stopped = false;
 
@@ -4097,12 +4074,10 @@ static int synaptics_rmi4_resume(struct device *dev)
 #endif
 //<ASUS_DTP->
 }
-
 static const struct dev_pm_ops synaptics_rmi4_dev_pm_ops = {
 	.suspend = synaptics_rmi4_suspend,
 	.resume  = synaptics_rmi4_resume,
 };
-#endif
 
 static struct platform_driver synaptics_rmi4_driver = {
 	.driver = {

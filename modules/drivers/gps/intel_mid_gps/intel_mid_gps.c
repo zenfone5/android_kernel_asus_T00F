@@ -446,7 +446,7 @@ static void __exit intel_mid_gps_driver_exit(void)
 	platform_driver_unregister(&intel_mid_gps_driver);
 }
 
-module_init(intel_mid_gps_driver_init);
+late_initcall(intel_mid_gps_driver_init);
 module_exit(intel_mid_gps_driver_exit);
 
 MODULE_AUTHOR("Kuppuswamy, Sathyanarayanan");

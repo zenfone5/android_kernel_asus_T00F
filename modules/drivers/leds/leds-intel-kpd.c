@@ -134,7 +134,7 @@ static int __init intel_kpd_led_rpmsg_init(void)
 	return register_rpmsg_driver(&intel_kpd_led_rpmsg);
 }
 
-module_init(intel_kpd_led_rpmsg_init);
+late_initcall(intel_kpd_led_rpmsg_init);
 
 static void __exit intel_kpd_led_rpmsg_exit(void)
 {

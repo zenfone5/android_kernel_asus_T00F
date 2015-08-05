@@ -37,8 +37,11 @@
 #include <linux/input/intel_mid_vibra.h>
 #include <asm/intel-mid.h>
 #include <trace/events/power.h>
-#include "mid_vibra.h"
 #include <asm/intel_scu_pmic.h>
+#include <linux/hrtimer.h>
+#include <linux/wakelock.h>
+#include <../../../../drivers/staging/android/timed_output.h>
+#include "mid_vibra.h"
 #include <linux/gpio.h>
 
 #define PWM0CLKDIV1 0x61
@@ -54,6 +57,14 @@
 #define PROJ_601 5
 extern  int Read_HW_ID(void);
 extern  int Read_PROJ_ID(void);
+
+static struct {
+	struct mutex lock;
+	struct work_struct work;
+	struct hrtimer timer;
+	struct wake_lock wklock;
+	struct vibra_info *info;
+} vibdata;
 
 union sst_pwmctrl_reg {
 	struct {
@@ -163,23 +174,20 @@ static int vibra_soc_pwm_configure(struct vibra_info *info, bool enable)
 static int vibra_pmic_pwm_configure(struct vibra_info *info, bool enable)
 {
        int ret = 0;
-       printk("%s: %s\n", __func__, enable ? "on" : "off");
-       if (enable) {/*enable PWM block */
-               if(Read_PROJ_ID() == PROJ_600 || Read_PROJ_ID() == PROJ_601){
-                   ret = intel_scu_ipc_iowrite8(PWM0DUTYCYCLE,0x59);
-               }else{
-                   ret = intel_scu_ipc_iowrite8(PWM0DUTYCYCLE,*info->duty_cycle);
-               }
-
-               if(ret)
-                       printk("[VIB] write vibra_drv8601_enable duty value faild\n");
-
-       } else { /*disable PWM block */
-               ret = intel_scu_ipc_iowrite8(PWM0DUTYCYCLE,0x00);
-               if(ret)
-                       printk("[VIB] write vibra_disable duty value faild\n");
-       }
-       return 0;
+	pr_debug("%s: %s\n", __func__, enable ? "on" : "off");
+	//pr_debug("%s: is_incall is %s\n", __func__, is_incall? "true" : "false"); /* do not enable vibrator when audio android mode is incall(2) */
+	if (enable) {	/*enable PWM block */
+		ret = intel_scu_ipc_iowrite8(PWM0DUTYCYCLE, *info->duty_cycle);
+		pr_debug("%s: enable PWM block\n", __func__);
+		if (ret)
+			printk("[VIB] write write vibra_drv8601_enable duty value faild\n");
+	} else {	/*disable PWM block */
+		ret = intel_scu_ipc_iowrite8(PWM0DUTYCYCLE,0x00);
+		pr_debug("%s: disable PWM block\n", __func__);
+		if (ret)
+			printk("[VIB] write vibra_disable duty value faild\n");
+	}
+	return 0;
 }
 
 
@@ -189,7 +197,7 @@ static void vibra_drvic_enable(int value)
        if(value == 1)
             gpio_set_value(VIBRA_DRV, 1);
        else
-            gpio_set_value(VIBRA_DRV, 0);
+            gpio_set_value(VIBRA_DRV, 1);
 
 }
 
@@ -215,43 +223,29 @@ static void vibra_drv2605_enable(struct vibra_info *info)
 
 static void vibra_disable(struct vibra_info *info)
 {
-
-	//pr_debug("%s: Disable", __func__);
+	pr_debug("%s: Disable", __func__);
+	trace_vibrator(0);
 	mutex_lock(&info->lock);
-
-#if GPIO_PWM_VIB
-	gpio_set_value_cansleep(info->gpio_en, 0);
-	//info->enabled = false;
-	pm_runtime_put(info->dev);
-
-#endif
-        if(Read_HW_ID() == PCB_ER2 || Read_HW_ID() == PCB_PR || Read_HW_ID() == PCB_PR2 || Read_HW_ID() == PCB_MP_RF){
-              vibra_drvic_enable(0);
-        }
-
+	vibra_gpio_set_value_cansleep(info, 0);
 	info->enabled = false;
-        info->pwm_configure(info,false);
-
+	info->pwm_configure(info, false);
+	pm_runtime_put(info->dev);
 	mutex_unlock(&info->lock);
 }
+
 
 static void vibra_drv8601_enable(struct vibra_info *info)
 {
-        //pr_debug("%s: Enable", __func__);
+	pr_debug("%s: Enable", __func__);
+	trace_vibrator(1);
 	mutex_lock(&info->lock);
-#if GPIO_PWM_VIB
 	pm_runtime_get_sync(info->dev);
-	gpio_set_value_cansleep(info->gpio_en, 1);
+	info->pwm_configure(info, true);
+	vibra_gpio_set_value_cansleep(info, 1);
 	info->enabled = true;
-#endif
-        if(Read_HW_ID() == PCB_ER2 || Read_HW_ID() == PCB_PR || Read_HW_ID() == PCB_PR2 || Read_HW_ID() == PCB_MP_RF){
-              vibra_drvic_enable(1);
-        }
-
-	info->enabled = true;
-        info->pwm_configure(info,true);
 	mutex_unlock(&info->lock);
 }
+
 
 /*******************************************************************************
  * SYSFS                                                                       *
@@ -448,7 +442,77 @@ struct vibra_info *mid_vibra_setup(struct device *dev, struct mid_vibra_pdata *d
 	}
 	info->disable = vibra_disable;
 
+	vibdata.info = info;
+
 	return info;
+}
+
+static void vibrator_on(void)
+{
+	wake_lock(&vibdata.wklock);
+	vibdata.info->enable(vibdata.info);
+}
+
+static void vibrator_off(void)
+{
+	wake_unlock(&vibdata.wklock);
+	vibdata.info->disable(vibdata.info);
+}
+
+static int vibrator_get_time(struct timed_output_dev *dev)
+{
+	if (hrtimer_active(&vibdata.timer)) {
+		ktime_t r = hrtimer_get_remaining(&vibdata.timer);
+		return ktime_to_ms(r);
+	}
+
+	return 0;
+}
+
+static void vibrator_enable(struct timed_output_dev *dev, int value)
+{
+	mutex_lock(&vibdata.lock);
+
+	hrtimer_cancel(&vibdata.timer);
+	cancel_work_sync(&vibdata.work);
+
+	if (value) {
+		vibrator_on();
+		hrtimer_start(&vibdata.timer, ns_to_ktime((u64) value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
+	} else
+		vibrator_off();
+
+	mutex_unlock(&vibdata.lock);
+}
+
+static struct timed_output_dev to_dev = {
+	.name = "vibrator",
+	.get_time = vibrator_get_time,
+	.enable = vibrator_enable,
+};
+
+static enum hrtimer_restart vibrator_timer_func(struct hrtimer *timer)
+{
+	schedule_work(&vibdata.work);
+	return HRTIMER_NORESTART;
+}
+
+static void vibrator_work(struct work_struct *work)
+{
+	vibrator_off();
+}
+
+static void timed_output_subclass_init(void)
+{
+	hrtimer_init(&vibdata.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	vibdata.timer.function = vibrator_timer_func;
+	INIT_WORK(&vibdata.work, vibrator_work);
+	wake_lock_init(&vibdata.wklock, WAKE_LOCK_SUSPEND, "vibrator");
+	mutex_init(&vibdata.lock);
+
+	if (timed_output_dev_register(&to_dev) < 0) {
+		pr_err("%s: fail to create timed output dev\n", __func__);
+	}
 }
 
 static int intel_mid_vibra_probe(struct pci_dev *pci,
@@ -521,10 +585,13 @@ static int intel_mid_vibra_probe(struct pci_dev *pci,
 	pm_runtime_allow(&pci->dev);
 	pm_runtime_put_noidle(&pci->dev);
 
-        ret = intel_scu_ipc_iowrite8(PWM0CLKDIV1, 0x00);
+	timed_output_subclass_init();
+
+        ret = intel_scu_ipc_iowrite8(PWM0CLKDIV1, 0x05);
 
         if (!ret){
-                if(Read_PROJ_ID() == PROJ_600 || Read_PROJ_ID() == PROJ_601){
+        	
+                if(Read_PROJ_ID() == PROJ_600 || Read_PROJ_ID() == PROJ_601){ 
                     ret = intel_scu_ipc_iowrite8(PWM0CLKDIV0, 0x05);
                 }else{
                     ret = intel_scu_ipc_iowrite8(PWM0CLKDIV0, 0x25);

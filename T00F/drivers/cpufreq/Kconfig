@@ -196,6 +196,32 @@ config CPU_FREQ_GOV_INTERACTIVE
 
 	  If in doubt, say N.
 
+config CPU_FREQ_GOV_BIOSHOCK
+	tristate "'bioshock' cpufreq policy governor"
+	depends on CPU_FREQ	
+	help
+	credits to Jamison904
+
+config CPU_FREQ_GOV_IMPULSE
+	tristate "'impulse' cpufreq policy governor"
+	help
+	'impulse' - This driver adds a dynamic cpufreq policy governor
+	designed for optimized balance between battery and performance.
+
+	If in doubt, say N.
+
+config CPU_FREQ_GOV_THESSJACTIVE
+	tristate "'thessjactive' cpufreq policy governor"
+	depends on CPU_FREQ	
+	help
+	credits to TheSSJ
+
+config CPU_FREQ_GOV_CONSERVATIVEX
+	tristate "'conservativeX' cpufreq policy governor"
+	depends on CPU_FREQ	
+	help
+	A less aggressive version of conservative governor
+
 config CPU_FREQ_GOV_CONSERVATIVE
 	tristate "'conservative' cpufreq governor"
 	depends on CPU_FREQ
@@ -219,6 +245,28 @@ config CPU_FREQ_GOV_CONSERVATIVE
 	  For details, take a look at linux/Documentation/cpu-freq.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_LIONHEART
+	tristate "'lionheart' cpufreq governor"
+	depends on CPU_FREQ
+	help
+	lionheart' - a "smart" optimized governor!
+
+config CPU_FREQ_GOV_YANKACTIVE
+	tristate "'yankactive' cpufreq policy governor"
+	help
+	'yankactive' - This driver adds a dynamic cpufreq policy governor
+	designed for latency-sensitive workloads.
+	The governor is based on interactive with just different default settings
+	and can be achieved using interactive with a script. This is added for
+	simplification purposes for myself.
+
+config CPU_FREQ_GOV_ADAPTIVE
+	tristate "'adaptive' cpufreq policy governor"
+	---help---
+	'adaptive' - This driver adds a dynamic cpufreq policy governor
+	designed for latency-sensitive workloads and also for demanding
+	performance.
 
 config GENERIC_CPUFREQ_CPU0
 	tristate "Generic CPU0 cpufreq driver"
